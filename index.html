@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ویرایشگر PDF</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4a47a3">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ویرایشگر PDF">
+
+<!-- فونت وزیرمتن -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  * {
+    box-sizing: border-box;
+    font-family: 'Vazirmatn', 'Vazir', Tahoma, sans-serif;
+  }
+  body {
+    margin: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+    font-family: 'Vazirmatn', 'Vazir', Tahoma, sans-serif;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    overflow: hidden;
+  }
+  header {
+    background: #4a47a3;
+    color: #fff;
+    padding: 20px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+  header p { margin: 6px 0 0; font-size: 13px; opacity: 0.85; font-weight: 300; }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 15px 20px;
+    background: #f4f4f9;
+    border-bottom: 1px solid #e0e0e0;
+    align-items: center;
+  }
+  .toolbar button, .file-label {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #4a47a3;
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Vazirmatn', 'Vazir', Tahoma, sans-serif;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .toolbar button:hover, .file-label:hover { background: #37348a; }
+  .toolbar button:disabled { background: #b0b0c0; cursor: not-allowed; }
+  .toolbar button.danger { background: #d9534f; }
+  .toolbar button.danger:hover { background: #b8423e; }
+  .toolbar button.success { background: #28a745; }
+  .toolbar button.success:hover { background: #218838; }
+  .toolbar button.install { background: #f0a500; }
+  .toolbar button.install:hover { background: #d18e00; }
+  #fileInput { display: none; }
+
+  .viewer {
+    padding: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 300px;
+  }
+  .page-box {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fafafa;
+    position: relative;
+    transition: 0.2s;
+  }
+  .page-box:hover { border-color: #4a47a3; }
+  .page-box canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-radius: 4px;
+  }
+  .page-number {
+    position: absolute;
+    top: -10px;
+    right: 10px;
+    background: #4a47a3;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #888;
+    width: 100%;
+  }
+  .empty-state svg { width: 80px; height: 80px; opacity: 0.4; margin-bottom: 15px; }
+  .empty-state p { font-weight: 400; }
+  .status {
+    padding: 10px 20px;
+    background: #eef2ff;
+    font-size: 13px;
+    color: #4a47a3;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    font-weight: 500;
+  }
+  .hint {
+    padding: 10px 20px;
+    background: #fffbea;
+    font-size: 12px;
+    color: #8a6d3b;
+    border-top: 1px solid #f5e6b8;
+    font-weight: 400;
+  }
+
+  /* مودال راهنمای نصب iOS */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h2 { margin: 0 0 12px; font-size: 18px; color: #4a47a3; }
+  .modal p { font-size: 14px; line-height: 1.9; color: #444; margin: 8px 0; }
+  .modal .step {
+    background: #f4f4f9;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    text-align: right;
+  }
+  .modal button {
+    margin-top: 16px;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    background: #4a47a3;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📄 ویرایشگر PDF</h1>
+    <p>آپلود، نمایش همه صفحات، ادغام صفحات، چرخش و حذف</p>
+  </header>
+
+  <div class="toolbar">
+    <label class="file-label">
+      📤 آپلود PDF
+      <input type="file" id="fileInput" accept="application/pdf">
+    </label>
+    <button id="twoPageBtn" disabled>👀 چیدمان دو صفحه‌ای</button>
+    <button id="mergeBtn" class="success" disabled>🔗 ادغام دو صفحه در یک صفحه</button>
+    <button id="rotateBtn" disabled>🔄 چرخش ۹۰ درجه</button>
+    <button id="deleteBtn" class="danger" disabled>🗑️ حذف صفحه آخر</button>
+    <button id="downloadBtn" class="success" disabled>💾 دانلود PDF</button>
+    <button id="installBtn" class="install" style="display:none">📲 افزودن به صفحه اصلی</button>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <p>هنوز فایلی آپلود نشده است</p>
+    </div>
+  </div>
+
+  <div class="status" id="status">آماده</div>
+  <div class="hint">
+    💡 در حالت ادغام، صفحه‌ها جفت‌جفت (۱+۲، ۳+۴ و ...) در یک صفحه ترکیب می‌شوند. اگر تعداد صفحات فرد باشد، صفحه آخر در سمت راست قرار می‌گیرد و سمت چپ آن سفید می‌ماند.
+  </div>
+</div>
+
+<!-- مودال راهنمای نصب iOS -->
+<div class="modal-overlay" id="iosModal">
+  <div class="modal">
+    <h2>📲 افزودن به صفحه اصلی</h2>
+    <p>برای افزودن این برنامه به صفحه اصلی آیفون:</p>
+    <div class="step">۱. دکمه <b>اشتراک‌گذاری</b> (مربع با فلش رو به بالا) را در پایین سافاری بزنید.</div>
+    <div class="step">۲. گزینه <b>«Add to Home Screen»</b> یا <b>«افزودن به صفحه اصلی»</b> را انتخاب کنید.</div>
+    <div class="step">۳. روی <b>«Add»</b> بزنید.</div>
+    <button onclick="document.getElementById('iosModal').classList.remove('show')">متوجه شدم</button>
+  </div>
+</div>
+
+<script>
+/* ---------- PWA: نصب ---------- */
+let deferredPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+// رویداد نصب (کروم/اج/اندروید)
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (!isStandalone) installBtn.style.display = 'inline-flex';
+});
+
+// اگر نصب شد، دکمه مخفی شود
+window.addEventListener('appinstalled', () => {
+  installBtn.style.display = 'none';
+  deferredPrompt = null;
+  setStatus('برنامه نصب شد ✅');
+});
+
+// نمایش دکمه روی iOS (چون beforeinstallprompt پشتیبانی نمی‌شود)
+if (isIOS && !isStandalone) {
+  installBtn.style.display = 'inline-flex';
+}
+
+installBtn.addEventListener('click', async () => {
+  if (deferredPrompt) {
+    // اندروید/دسکتاپ کروم
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setStatus('برنامه نصب شد ✅');
+    deferredPrompt = null;
+    installBtn.style.display = 'none';
+  } else if (isIOS) {
+    // iOS: نمایش راهنما
+    document.getElementById('iosModal').classList.add('show');
+  } else {
+    alert('مرورگر شما از نصب مستقیم پشتیبانی نمی‌کند.\nاز منوی مرورگر گزینه «Install» یا «Add to Home Screen» را انتخاب کنید.');
+  }
+});
+
+// ثبت Service Worker (برای PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('SW ثبت نشد:', err);
+    });
+  });
+}
+
+/* ---------- بقیه منطق ---------- */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let originalPdfBytes = null;
+let currentPdfBytes = null;
+let pageCount = 0;
+let showingTwoPage = false;
+
+const viewer = document.getElementById('viewer');
+const statusEl = document.getElementById('status');
+const fileInput = document.getElementById('fileInput');
+
+const twoPageBtn = document.getElementById('twoPageBtn');
+const mergeBtn = document.getElementById('mergeBtn');
+const rotateBtn = document.getElementById('rotateBtn');
+const deleteBtn = document.getElementById('deleteBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+
+function setStatus(msg) { statusEl.textContent = msg; }
+
+function toggleButtons(enabled) {
+  twoPageBtn.disabled = !enabled;
+  mergeBtn.disabled = !enabled;
+  rotateBtn.disabled = !enabled;
+  deleteBtn.disabled = !enabled;
+  downloadBtn.disabled = !enabled;
+}
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('در حال بارگذاری...');
+  const buf = await file.arrayBuffer();
+  originalPdfBytes = new Uint8Array(buf);
+  currentPdfBytes = new Uint8Array(buf);
+  showingTwoPage = false;
+  twoPageBtn.textContent = '👀 چیدمان دو صفحه‌ای';
+  await renderPdf(currentPdfBytes);
+  toggleButtons(true);
+  setStatus(`فایل بارگذاری شد - ${pageCount} صفحه`);
+});
+
+async function renderPdf(bytes) {
+  const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+  const pdf = await loadingTask.promise;
+  pageCount = pdf.numPages;
+  viewer.innerHTML = '';
+
+  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const box = document.createElement('div');
+    box.className = 'page-box';
+    box.appendChild(canvas);
+    const label = document.createElement('div');
+    label.className = 'page-number';
+    label.textContent = `صفحه ${pageNum}`;
+    box.appendChild(label);
+    viewer.appendChild(box);
+  }
+}
+
+twoPageBtn.addEventListener('click', async () => {
+  if (!currentPdfBytes) return;
+  showingTwoPage = !showingTwoPage;
+  twoPageBtn.textContent = showingTwoPage
+    ? '👀 چیدمان تک صفحه‌ای'
+    : '👀 چیدمان دو صفحه‌ای';
+  await renderPdf(currentPdfBytes);
+  setStatus(showingTwoPage ? 'چیدمان دو صفحه‌ای فعال' : 'چیدمان تک صفحه‌ای');
+});
+
+mergeBtn.addEventListener('click', async () => {
+  if (!currentPdfBytes) return;
+  try {
+    setStatus('در حال ادغام صفحات...');
+    const { PDFDocument } = PDFLib;
+    const srcDoc = await PDFDocument.load(currentPdfBytes);
+    const total = srcDoc.getPageCount();
+
+    if (total < 2) {
+      alert('حداقل دو صفحه برای ادغام لازم است.');
+      setStatus('ادغام انجام نشد');
+      return;
+    }
+
+    const newDoc = await PDFDocument.create();
+    const newPageCount = Math.ceil(total / 2);
+
+    for (let i = 0; i < newPageCount; i++) {
+      const leftIdx = i * 2;
+      const rightIdx = i * 2 + 1;
+
+      const leftPage = srcDoc.getPage(leftIdx);
+      const leftSize = leftPage.getSize();
+      const leftRot = leftPage.getRotation().angle;
+      const leftIsLandscape = leftRot % 180 !== 0;
+      const leftW = leftIsLandscape ? leftSize.height : leftSize.width;
+      const leftH = leftIsLandscape ? leftSize.width : leftSize.height;
+
+      let rightPage = null, rightW = 0, rightH = 0;
+      if (rightIdx < total) {
+        rightPage = srcDoc.getPage(rightIdx);
+        const rSize = rightPage.getSize();
+        const rRot = rightPage.getRotation().angle;
+        const rIsLandscape = rRot % 180 !== 0;
+        rightW = rIsLandscape ? rSize.height : rSize.width;
+        rightH = rIsLandscape ? rSize.width : rSize.height;
+      }
+
+      const isSingle = rightPage === null;
+      const totalW = isSingle ? leftW * 2 : leftW + rightW;
+      const totalH = Math.max(leftH, rightH || leftH);
+
+      const newPage = newDoc.addPage([totalW, totalH]);
+
+      const firstX = isSingle ? leftW : 0;
+      const [leftEmbed] = await newDoc.embedPdf(srcDoc, [leftIdx]);
+      newPage.drawPage(leftEmbed, {
+        x: firstX,
+        y: totalH - leftH,
+        width: leftW,
+        height: leftH,
+      });
+
+      if (rightPage) {
+        const [rightEmbed] = await newDoc.embedPdf(srcDoc, [rightIdx]);
+        newPage.drawPage(rightEmbed, {
+          x: leftW,
+          y: totalH - rightH,
+          width: rightW,
+          height: rightH,
+        });
+      }
+    }
+
+    currentPdfBytes = await newDoc.save();
+    showingTwoPage = true;
+    await renderPdf(currentPdfBytes);
+    setStatus(`ادغام انجام شد - ${newDoc.getPageCount()} صفحه`);
+  } catch (err) {
+    console.error(err);
+    alert('خطا در ادغام: ' + err.message);
+    setStatus('خطا در ادغام');
+  }
+});
+
+rotateBtn.addEventListener('click', async () => {
+  if (!currentPdfBytes) return;
+  try {
+    setStatus('در حال چرخش...');
+    const { PDFDocument, degrees } = PDFLib;
+    const doc = await PDFDocument.load(currentPdfBytes);
+    doc.getPages().forEach((p) => {
+      const cur = p.getRotation().angle;
+      p.setRotation(degrees((cur + 90) % 360));
+    });
+    currentPdfBytes = await doc.save();
+    await renderPdf(currentPdfBytes);
+    setStatus('چرخش اعمال شد');
+  } catch (err) {
+    console.error(err);
+    alert('خطا در چرخش: ' + err.message);
+  }
+});
+
+deleteBtn.addEventListener('click', async () => {
+  if (!currentPdfBytes) return;
+  try {
+    const { PDFDocument } = PDFLib;
+    const doc = await PDFDocument.load(currentPdfBytes);
+    if (doc.getPageCount() <= 1) {
+      alert('حداقل یک صفحه باید باقی بماند.');
+      return;
+    }
+    doc.removePage(doc.getPageCount() - 1);
+    currentPdfBytes = await doc.save();
+    await renderPdf(currentPdfBytes);
+    setStatus('آخرین صفحه حذف شد');
+  } catch (err) {
+    console.error(err);
+    alert('خطا در حذف: ' + err.message);
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  if (!currentPdfBytes) return;
+  const blob = new Blob([currentPdfBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'edited.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('فایل دانلود شد');
+});
+</script>
+</body>
+</html>
